@@ -1,0 +1,27 @@
+apply plugin: 'java'
+apply plugin: "jacoco"
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+version = '1.0.0'
+
+repositories {
+    jcenter()
+}
+
+// In this section you declare the dependencies for your production and test code
+dependencies {
+    compile 'org.slf4j:slf4j-api:+'
+    compile 'org.slf4j:slf4j-simple:+'
+
+    testCompile 'junit:junit:4.+'
+}
+
+task sourcesJar(group: 'build', type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task jacoco(group: 'verification', dependsOn: jacocoTestReport) {
+}
