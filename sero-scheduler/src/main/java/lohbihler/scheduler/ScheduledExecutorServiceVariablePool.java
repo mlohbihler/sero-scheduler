@@ -75,7 +75,7 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
 
     public ScheduledExecutorServiceVariablePool(final Clock clock) {
         this.clock = clock;
-        scheduler = new Thread(this);
+        scheduler = new Thread(this, "ScheduledExecutorServiceVariablePool");
         state = State.running;
         scheduler.start();
         executorService = Executors.newCachedThreadPool();
