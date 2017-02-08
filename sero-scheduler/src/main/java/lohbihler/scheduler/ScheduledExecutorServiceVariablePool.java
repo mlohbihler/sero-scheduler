@@ -67,7 +67,7 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
     private final ExecutorService executorService;
     private final Thread scheduler;
     private volatile State state;
-    private final List<ScheduleFutureImpl> tasks = new LinkedList<>();
+    private final List<ScheduleFutureImpl<?>> tasks = new LinkedList<>();
 
     public ScheduledExecutorServiceVariablePool() {
         this(Clock.systemUTC());
@@ -100,10 +100,10 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
 
     @Override
     public <V> ScheduledFuture<V> schedule(final Callable<V> callable, final long delay, final TimeUnit unit) {
-        throw new RuntimeException("not implemented");
+        return addTask(new OneTimeCallable<>(callable, delay, unit));
     }
 
-    private ScheduleFutureImpl addTask(final ScheduleFutureImpl task) {
+    private <V> ScheduleFutureImpl<V> addTask(final ScheduleFutureImpl<V> task) {
         synchronized (tasks) {
             int index = Collections.binarySearch(tasks, task);
             if (index < 0)
@@ -120,7 +120,7 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
             while (state == State.running) {
                 synchronized (tasks) {
                     long waitTime;
-                    ScheduleFutureImpl task = null;
+                    ScheduleFutureImpl<?> task = null;
 
                     // Poll for a task.
                     if (tasks.isEmpty())
@@ -136,7 +136,8 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
                             tasks.remove(0);
                             if (!task.isCancelled()) {
                                 // Execute the task
-                                task.setFuture(executorService.submit(task.getCommand()));
+                                task.execute();
+                                //                                task.setFuture(executorService.submit(task.getCommand()));
                             }
                         }
                     }
@@ -155,13 +156,13 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         }
     }
 
-    abstract class ScheduleFutureImpl implements ScheduledFuture<Void> {
-        protected volatile Future<?> future;
+    abstract class ScheduleFutureImpl<V> implements ScheduledFuture<V> {
+        protected volatile Future<V> future;
         private volatile boolean cancelled;
 
-        abstract Runnable getCommand();
+        abstract void execute();
 
-        void setFuture(final Future<?> future) {
+        void setFuture(final Future<V> future) {
             synchronized (this) {
                 this.future = future;
                 notifyAll();
@@ -199,7 +200,7 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         }
 
         @Override
-        public Void get() throws InterruptedException, ExecutionException {
+        public V get() throws InterruptedException, ExecutionException {
             try {
                 return await(false, 0L);
             } catch (final TimeoutException e) {
@@ -209,12 +210,12 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         }
 
         @Override
-        public Void get(final long timeout, final TimeUnit unit)
+        public V get(final long timeout, final TimeUnit unit)
                 throws InterruptedException, ExecutionException, TimeoutException {
             return await(true, unit.toMillis(timeout));
         }
 
-        private Void await(final boolean timed, final long millis)
+        private V await(final boolean timed, final long millis)
                 throws InterruptedException, ExecutionException, TimeoutException {
             final long expiry = clock.millis() + millis;
 
@@ -223,10 +224,8 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
                     final long remaining = expiry - clock.millis();
                     if (future != null) {
                         if (timed)
-                            future.get(remaining, TimeUnit.MILLISECONDS);
-                        else
-                            future.get();
-                        return null;
+                            return future.get(remaining, TimeUnit.MILLISECONDS);
+                        return future.get();
                     }
                     if (isCancelled())
                         throw new CancellationException();
@@ -243,7 +242,7 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         }
     }
 
-    class OneTime extends ScheduleFutureImpl {
+    class OneTime extends ScheduleFutureImpl<Void> {
         private final Runnable command;
         private final long runtime;
 
@@ -252,9 +251,10 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
             runtime = clock.millis() + unit.toMillis(delay);
         }
 
+        @SuppressWarnings("unchecked")
         @Override
-        Runnable getCommand() {
-            return command;
+        void execute() {
+            setFuture((Future<Void>) executorService.submit(command));
         }
 
         @Override
@@ -273,7 +273,7 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         }
     }
 
-    abstract class Repeating extends ScheduleFutureImpl {
+    abstract class Repeating extends ScheduleFutureImpl<Void> {
         private final Runnable command;
         protected final TimeUnit unit;
 
@@ -293,15 +293,16 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
             this.unit = unit;
         }
 
+        @SuppressWarnings("unchecked")
+        @Override
+        void execute() {
+            setFuture((Future<Void>) executorService.submit(command));
+        }
+
         @Override
         public long getDelay(final TimeUnit unit) {
             final long millis = nextRuntime - clock.millis();
             return unit.convert(millis, TimeUnit.MILLISECONDS);
-        }
-
-        @Override
-        Runnable getCommand() {
-            return command;
         }
 
         @Override
@@ -337,6 +338,36 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         @Override
         void updateNextRuntime() {
             nextRuntime = clock.millis() + unit.toMillis(delay);
+        }
+    }
+
+    class OneTimeCallable<V> extends ScheduleFutureImpl<V> {
+        private final Callable<V> command;
+        private final long runtime;
+
+        public OneTimeCallable(final Callable<V> command, final long delay, final TimeUnit unit) {
+            this.command = command;
+            runtime = clock.millis() + unit.toMillis(delay);
+        }
+
+        @Override
+        void execute() {
+            setFuture(executorService.submit(command));
+        }
+
+        @Override
+        public boolean isDone() {
+            synchronized (this) {
+                if (future != null)
+                    return future.isDone();
+                return isCancelled();
+            }
+        }
+
+        @Override
+        public long getDelay(final TimeUnit unit) {
+            final long millis = runtime - clock.millis();
+            return unit.convert(millis, TimeUnit.MILLISECONDS);
         }
     }
 

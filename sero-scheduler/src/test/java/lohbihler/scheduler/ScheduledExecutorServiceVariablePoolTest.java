@@ -27,6 +27,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import java.time.Clock;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -176,7 +177,7 @@ public class ScheduledExecutorServiceVariablePoolTest {
 
         // Wait until both tasks are done.
         executorFuture.get(100 + TOLERANCE_MILLIS, TimeUnit.MILLISECONDS);
-        timerFuture.get(1, TimeUnit.MILLISECONDS);
+        timerFuture.get(TOLERANCE_MILLIS, TimeUnit.MILLISECONDS);
 
         assertEquals(executorFuture.isCancelled(), timerFuture.isCancelled());
         assertEquals(executorFuture.isDone(), timerFuture.isDone());
@@ -270,6 +271,70 @@ public class ScheduledExecutorServiceVariablePoolTest {
         assertEquals(executorFuture.isCancelled(), timerFuture.isCancelled());
         assertEquals(executorFuture.isDone(), timerFuture.isDone());
         assertTolerance(executorCompleteTime.get(), timerCompleteTime.get());
+    }
+
+    @Test
+    public void scheduleCallable() throws InterruptedException, ExecutionException, TimeoutException {
+        final Callable<String> executorCallable = () -> {
+            sleepPeacefully(200);
+            return "executor";
+        };
+        final Callable<String> timerCallable = () -> {
+            sleepPeacefully(200);
+            return "timer";
+        };
+
+        final ScheduledFuture<?> executorFuture = executor.schedule(executorCallable, 200, TimeUnit.MILLISECONDS);
+        final ScheduledFuture<?> timerFuture = timer.schedule(timerCallable, 200, TimeUnit.MILLISECONDS);
+
+        assertEquals(executorFuture.isCancelled(), timerFuture.isCancelled());
+        assertEquals(executorFuture.isDone(), timerFuture.isDone());
+
+        // Get with timeout halfway
+        try {
+            executorFuture.get(100, TimeUnit.MILLISECONDS);
+            fail("Should have failed with TimeoutException");
+        } catch (final TimeoutException e) {
+            // Expected
+        }
+
+        try {
+            // We already waited 100ms for the executor future, so don't wait here.
+            timerFuture.get(0, TimeUnit.MILLISECONDS);
+            fail("Should have failed with TimeoutException");
+        } catch (final TimeoutException e1) {
+            // Expected
+        }
+
+        // Wait until both tasks are running. Sleeping for 100ms will bring us to ~200ms elapsed
+        sleepPeacefully(100);
+        assertEquals(executorFuture.isCancelled(), timerFuture.isCancelled());
+        assertEquals(executorFuture.isDone(), timerFuture.isDone());
+
+        try {
+            executorFuture.get(100, TimeUnit.MILLISECONDS);
+            fail("Should have failed with TimeoutException");
+        } catch (final TimeoutException e) {
+            // Expected
+        }
+
+        try {
+            // We already waited 100ms for the executor future, so don't wait here.
+            timerFuture.get(0, TimeUnit.MILLISECONDS);
+            fail("Should have failed with TimeoutException");
+        } catch (final TimeoutException e1) {
+            // Expected
+        }
+
+        assertEquals(executorFuture.isCancelled(), timerFuture.isCancelled());
+        assertEquals(executorFuture.isDone(), timerFuture.isDone());
+
+        // Wait until both tasks are done.
+        assertEquals("executor", executorFuture.get(100 + TOLERANCE_MILLIS, TimeUnit.MILLISECONDS));
+        assertEquals("timer", timerFuture.get(1, TimeUnit.MILLISECONDS));
+
+        assertEquals(executorFuture.isCancelled(), timerFuture.isCancelled());
+        assertEquals(executorFuture.isDone(), timerFuture.isDone());
     }
 
     @Test
