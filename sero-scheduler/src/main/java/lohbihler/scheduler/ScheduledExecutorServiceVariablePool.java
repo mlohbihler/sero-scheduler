@@ -137,7 +137,6 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
                             if (!task.isCancelled()) {
                                 // Execute the task
                                 task.execute();
-                                //                                task.setFuture(executorService.submit(task.getCommand()));
                             }
                         }
                     }
