@@ -40,8 +40,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ScheduledExecutorServiceVariablePoolTest {
+    static final Logger LOG = LoggerFactory.getLogger(ScheduledExecutorServiceVariablePoolTest.class);
+
     // The tolerance in milliseconds that is allowed between delays and completion times
     // of the executor service version and the timer version.
     private static final long TOLERANCE_MILLIS = 25;
@@ -429,5 +433,15 @@ public class ScheduledExecutorServiceVariablePoolTest {
         } catch (final InterruptedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Test
+    public void cancel() {
+        final ScheduledFuture<?> future = timer.scheduleWithFixedDelay(() -> LOG.info("Executed"), 1, 1,
+                TimeUnit.SECONDS);
+        sleepPeacefully(1100);
+        final boolean cancelled = future.cancel(false);
+        LOG.info("Cancelled: {}", cancelled);
+        sleepPeacefully(3000);
     }
 }

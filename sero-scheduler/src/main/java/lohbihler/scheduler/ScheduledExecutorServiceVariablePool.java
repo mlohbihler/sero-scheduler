@@ -253,7 +253,9 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         @SuppressWarnings("unchecked")
         @Override
         void execute() {
-            setFuture((Future<Void>) executorService.submit(command));
+            synchronized (this) {
+                setFuture((Future<Void>) executorService.submit(command));
+            }
         }
 
         @Override
@@ -281,11 +283,13 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         public Repeating(final Runnable command, final long initialDelay, final TimeUnit unit) {
             this.command = () -> {
                 command.run();
-                if (!isCancelled()) {
-                    // Reschedule to run at the period from the last run.
-                    updateNextRuntime();
-                    clearFuture();
-                    addTask(this);
+                synchronized (this) {
+                    if (!isCancelled()) {
+                        // Reschedule to run at the period from the last run.
+                        updateNextRuntime();
+                        clearFuture();
+                        addTask(this);
+                    }
                 }
             };
             nextRuntime = clock.millis() + unit.toMillis(initialDelay);
@@ -295,7 +299,9 @@ public class ScheduledExecutorServiceVariablePool implements ScheduledExecutorSe
         @SuppressWarnings("unchecked")
         @Override
         void execute() {
-            setFuture((Future<Void>) executorService.submit(command));
+            synchronized (this) {
+                setFuture((Future<Void>) executorService.submit(command));
+            }
         }
 
         @Override
