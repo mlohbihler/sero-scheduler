@@ -15,10 +15,10 @@ repositories {
 
 // In this section you declare the dependencies for your production and test code
 dependencies {
-    compile 'org.slf4j:slf4j-api:1.7.+'
+    compile 'org.slf4j:slf4j-api:[1.7.0,1.8)'
 
     testCompile 'junit:junit:4.+'
-    testCompile 'org.slf4j:slf4j-simple:1.7.+'
+    testCompile 'org.slf4j:slf4j-simple:[1.7.0,1.8)'
 }
 
 task sourceJar(group: 'build', type: Jar, dependsOn: classes) {
